@@ -113,12 +113,14 @@ static int ipimbSetPv(int iPvIndex, void* pPvValue, void* payload)
     return 0;
 }
 
-int	 ipimbAdd(char *name, char *ttyName, char *mdestIP, unsigned int physID, unsigned int dtype,
-                  char *trigger, int polarity, char *delay, char *sync)
+int  ipimbAdd(char *name, char *ttyName, char *mdestIP, unsigned int physID, unsigned int dtype,
+              char* gen, char *trigger, int polarity, char *delay, char *sync)
 {
     IPIMB_DEVICE  * pdevice = NULL;
     DBADDR trigaddr;
+    DBADDR genaddr;
     static epicsUInt32 ev140 = 140;
+    static epicsUInt32 gen0 = 0;
 
     /*
      * Sigh.  The joys of backwards compatibility.
@@ -175,10 +177,20 @@ int	 ipimbAdd(char *name, char *ttyName, char *mdestIP, unsigned int physID, uns
         pdevice = new IPIMB_DEVICE(name, ttyName, mdestIP, physID, &ev140, &ev140, polarity, delay, sync);
     } else {
         epicsUInt32 *trig = (epicsUInt32 *) trigaddr.pfield;
+        epicsUInt32 *genp = NULL;
+        if (!gen) {
+          // if gen is null then we using an ever so use the magic offset...
+          genp = trig + MAX_EV_TRIGGERS;
+        } else if (dbNameToAddr(gen, &genaddr)) {
+          printf("No PV gen named %s, using constant gen 0!\n", gen);
+          genp = &gen0;
+        } else {
+          genp = (epicsUInt32 *) genaddr.pfield;
+        }
         printf("Found PV trigger for IPIMB%d %s at %p (gen at %p)\n", 
-               physID, trigger, trig, trig + MAX_EV_TRIGGERS);
+               physID, trigger, trig, genp);
         pdevice = new IPIMB_DEVICE(name, ttyName, mdestIP, physID,
-                                   trig, trig + MAX_EV_TRIGGERS, polarity, delay, sync);
+                                   trig, genp, polarity, delay, sync);
     }
 
     /* Add to the device linked list */
