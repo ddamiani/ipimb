@@ -46,7 +46,7 @@ record(aSub, "$(RECNAME):DOREAD") {
 record(aSub, "$(RECNAME):CURRENTFID") {
     field(DESC, "Current Fiducial")
     field(SCAN, "Passive")
-    field(SNAM, "evrTimeGetFiducial")
+    field(SNAM, "$(GETFIDFUNC)")
     field(INPA, "$(RECNAME):CH0_RAW.NAME")
     field(FTA,  "STRING")
     field(FLNK, "$(RECNAME):SUM")
@@ -263,7 +263,7 @@ record(aSub, "$(RECNAME):Configure") {
     field(FTQ,  "ULONG")
     field(NOQ,  "1")
 ## Trigger enable
-    field(INPR, "$(EVR):CTRL.DG$(TRIG)E")
+    field(INPR, "$(TRIGEN)")
     field(FTR,  "ULONG")
     field(NOR,  "1")
 
@@ -285,27 +285,4 @@ record(bi, "$(RECNAME):WaitConfig") {
     field(DTYP, "IPIMB")
     field(INP,  "@$(BOX):0:DATA")
     field(PRIO, "HIGH")
-}
-
-# This record calculates the expected delay, in fiducials, between the trigger and the
-# reception of the ipimb data.  There are three factors: Delay from the event to the
-# trigger, delay from the trigger to the sample, and serial line transmission delay.
-# (This last is a 256 byte data packet, encoded as 3 bytes for every 2, sent at 115000 baud.)
-record(calc, "$(RECNAME):DATA_DELAY")
-{
-    field(DESC, "IPIMB Data Delay")
-    field(INPA, "$(EVR):CTRL.DG$(TRIG)C CPP")
-    field(INPB, "$(EVR):CTRL.DG$(TRIG)D CPP")
-    field(INPC, "$(EVR):CTRL.DG$(TRIG)W CPP")
-    field(INPD, "$(RECNAME):TrigDelay")
-    field(CALC, "(8.4e-9*A*(B+C)+D*1e-9+3.3e-3)*360")
-    field(PINI, "NO")
-}
-
-record( bi, "$(RECNAME):SYNC" )
-{
-    field( DESC, "Timestamp Synchronization" )
-    field( ZNAM, "Out of Sync" )
-    field( ONAM, "Synchronized" )
-    field( VAL, "0" )
 }

@@ -1,0 +1,55 @@
+# This record calculates the expected delay, in fiducials, between the trigger and the
+# reception of the ipimb data.  There are three factors: Delay from the event to the
+# trigger, delay from the trigger to the sample, and serial line transmission delay.
+# (This last is a 256 byte data packet, encoded as 3 bytes for every 2, sent at 115000 baud.)
+record(calc, "$(RECNAME):DATA_DELAY")
+{
+    field(DESC, "IPIMB Data Delay")
+    field(INPA, "$(TPR):TRG$(TRIG)_TDESTICKS CPP")
+    field(INPB, "$(TPR):TRG$(TRIG)_TWIDTICKS CPP")
+    field(INPC, "$(RECNAME):TrigDelay")
+    field(CALC, "(8.4e-9*(A+B)+C*1e-9+3.3e-3)*360")
+    field(PINI, "NO")
+}
+
+record( bi, "$(RECNAME):SYNC" )
+{
+    field( DESC, "Timestamp Synchronization" )
+    field( ZNAM, "Out of Sync" )
+    field( ONAM, "Synchronized" )
+    field( VAL, "0" )
+}
+
+record(calc, "$(RECNAME):TRIGGER_CALC")
+{
+  field(DESC, "timingFifoRead event code")
+  field(CALC, "A+B")
+  field(INPA, "1000")
+  field(INPB, "$(TRIG)")
+  field(SCAN, "Passive")
+  field(PINI, "YES")
+  field(FLNK, "$(RECNAME):TRIGGER_CODE")
+}
+
+record(longin, "$(RECNAME):TRIGGER_CODE")
+{
+  field(PINI, "YES")
+  field(INP, "$(RECNAME):TRIGGER_CALC.VAL")
+}
+
+record(calc, "$(RECNAME):GEN_CALC")
+{
+  field(INPA, "$(RECNAME):TRIGGER_CODE CPP")
+  field(INPB, "$(TPR):CH$(TRIG)_EVCODE CPP")
+  field(INPC, "$(RECNAME):GEN_CALC.LA NPP")
+  field(INPD, "$(RECNAME):GEN_CALC.LB NPP")
+  field(INPE, "$(RECNAME):GEN_CALC.VAL NPP")
+  field(CALC, "E+(A!=C?1:0)+(B!=D?1:0)")
+  field(FLNK, "$(RECNAME):GEN")
+}
+
+record(longin, "$(RECNAME):GEN")
+{
+  field(PINI, "YES")
+  field(INP, "$(RECNAME):GEN_CALC.VAL")
+}
