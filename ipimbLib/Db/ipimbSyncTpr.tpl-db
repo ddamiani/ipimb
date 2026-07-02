@@ -2,13 +2,24 @@
 # reception of the ipimb data.  There are three factors: Delay from the event to the
 # trigger, delay from the trigger to the sample, and serial line transmission delay.
 # (This last is a 256 byte data packet, encoded as 3 bytes for every 2, sent at 115000 baud.)
+record(calc, "$(RECNAME):TRIGGER_DELAY")
+{
+  field(DESC, "IPIMB Trigger Delay")
+  field(INPA, "$(TPR):MODE CPP")
+  field(INPB, "$(TPR):TRG$(TRIG)_SYS0_TDES CPP")
+  field(INPC, "$(TPR):TRG$(TRIG)_SYS2_TDES CPP")
+  field(INPD, "$(TPR):TRG$(TRIG)_SYS0_TWID CPP")
+  field(INPE, "$(TPR):TRG$(TRIG)_SYS2_TWID CPP")
+  field(CALC, "(A==0?B+D:C+E)*1e-9")
+  field(PINI, "NO")
+}
+
 record(calc, "$(RECNAME):DATA_DELAY")
 {
     field(DESC, "IPIMB Data Delay")
-    field(INPA, "$(TPR):TRG$(TRIG)_TDESTICKS CPP")
-    field(INPB, "$(TPR):TRG$(TRIG)_TWIDTICKS CPP")
-    field(INPC, "$(RECNAME):TrigDelay")
-    field(CALC, "(8.4e-9*(A+B)+C*1e-9+3.3e-3)*360")
+    field(INPA, "$(RECNAME):TRIGGER_DELAY CPP")
+    field(INPB, "$(RECNAME):TrigDelay")
+    field(CALC, "(A+B*1e-9+3.3e-3)*360")
     field(PINI, "NO")
 }
 
@@ -37,14 +48,36 @@ record(longin, "$(RECNAME):TRIGGER_CODE")
   field(INP, "$(RECNAME):TRIGGER_CALC.VAL")
 }
 
+record(calc, "$(RECNAME):TRIGGER_MODE")
+{
+  field(INPA, "$(TPR):MODE CPP")
+  field(INPB, "0")
+  field(INPC, "$(TPR):CH$(TRIG)_RATEMODE CPP")
+  field(CALC, "A==0?B:C")
+}
+
+record(calc, "$(RECNAME):TRIGGER_STATE")
+{
+  field(INPA, "$(TPR):MODE CPP")
+  field(INPB, "$(TPR):CH$(TRIG)_RATEMODE CPP")
+  field(INPC, "$(TPR):CH$(TRIG)_FIXEDRATE CPP")
+  field(INPD, "$(TPR):CH$(TRIG)_ACRATE CPP")
+  field(INPE, "$(TPR):CH$(TRIG)_SEQCODE CPP")
+  field(INPF, "$(TPR):CH$(TRIG)_GROUP CPP")
+  field(INPG, "$(TPR):CH$(TRIG)_EVCODE CPP")
+  field(CALC, "A==1?((B==0?C:0)+(B==1?D:0)+(B==2?E:0)+(B==3?F:0)):G")
+}
+
 record(calc, "$(RECNAME):GEN_CALC")
 {
   field(INPA, "$(RECNAME):TRIGGER_CODE CPP")
-  field(INPB, "$(TPR):CH$(TRIG)_EVCODE CPP")
-  field(INPC, "$(RECNAME):GEN_CALC.LA NPP")
-  field(INPD, "$(RECNAME):GEN_CALC.LB NPP")
-  field(INPE, "$(RECNAME):GEN_CALC.VAL NPP")
-  field(CALC, "E+(A!=C?1:0)+(B!=D?1:0)")
+  field(INPB, "$(RECNAME):TRIGGER_STATE CPP")
+  field(INPC, "$(RECNAME):TRIGGER_MODE CPP")
+  field(INPD, "$(RECNAME):GEN_CALC.LA NPP")
+  field(INPE, "$(RECNAME):GEN_CALC.LB NPP")
+  field(INPF, "$(RECNAME):GEN_CALC.LC NPP")
+  field(INPG, "$(RECNAME):GEN_CALC.VAL NPP")
+  field(CALC, "G+(A!=D?1:0)+(B!=E?1:0)+(C!=F?1:0)")
   field(FLNK, "$(RECNAME):GEN")
 }
 
