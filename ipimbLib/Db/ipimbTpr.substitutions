@@ -10,10 +10,10 @@ file ipimbCH.tpl-db
 
 file ipimbALL.tpl-db
 {
-    { IOC = $(IOC), GETFIDFUNC = evrTimeGetFiducial, TRIGEN = $(EVR):CTRL.DG$(TRIG)E }
+    { IOC = $(IOC), GETFIDFUNC = ipimbGetFiducial, TRIGEN = $(TPR):CH$(TRIG)_SYS0_TCTL }
 }
 
-file ipimbSyncEvr.tpl-db
+file ipimbSyncTpr.tpl-db
 {
     { IOC = $(IOC) }
 }

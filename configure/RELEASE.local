@@ -14,9 +14,9 @@
 # ===============================================================
 # Define the version(s) of any other needed modules 
 # ===============================================================
-EVENT2_MODULE_VERSION       = R6.0.3
-TIMESYNC_MODULE_VERSION		= R2.0.5
-TIMINGAPI_MODULE_VERSION    = R0.9
+EVENT2_MODULE_VERSION       = R6.0.5
+TIMESYNC_MODULE_VERSION     = R3.0.0
+TIMINGAPI_MODULE_VERSION    = R0.11
 
 # ============================================================
 # External Support module path definitions
@@ -40,7 +40,3 @@ EPICS_BASE = $(EPICS_SITE_TOP)/base/$(BASE_MODULE_VERSION)
 
 # Check for invalid or undefined EPICS_BASE
 -include $(TOP)/../../EPICS_BASE.check
-
-#MY_MODULES=/reg/neh/home1/mcbrowne/trunk12/modules
-#EVENT2=$(MY_MODULES)/event2/current
-

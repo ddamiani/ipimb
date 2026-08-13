@@ -12,6 +12,7 @@ include $(TOP)/configure/CONFIG
 # databases, templates, substitutions like this
 # DB += ipimb.db
 DB += ipimb.db
+DB += ipimbTpr.db
 
 #----------------------------------------------------
 # Create and install (or just install)

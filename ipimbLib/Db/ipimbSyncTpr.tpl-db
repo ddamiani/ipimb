@@ -1,0 +1,88 @@
+# This record calculates the expected delay, in fiducials, between the trigger and the
+# reception of the ipimb data.  There are three factors: Delay from the event to the
+# trigger, delay from the trigger to the sample, and serial line transmission delay.
+# (This last is a 256 byte data packet, encoded as 3 bytes for every 2, sent at 115000 baud.)
+record(calc, "$(RECNAME):TRIGGER_DELAY")
+{
+  field(DESC, "IPIMB Trigger Delay")
+  field(INPA, "$(TPR):MODE CPP")
+  field(INPB, "$(TPR):TRG$(TRIG)_SYS0_TDES CPP")
+  field(INPC, "$(TPR):TRG$(TRIG)_SYS2_TDES CPP")
+  field(INPD, "$(TPR):TRG$(TRIG)_SYS0_TWID CPP")
+  field(INPE, "$(TPR):TRG$(TRIG)_SYS2_TWID CPP")
+  field(CALC, "(A==0?B+D:C+E)*1e-9")
+  field(PINI, "NO")
+}
+
+record(calc, "$(RECNAME):DATA_DELAY")
+{
+    field(DESC, "IPIMB Data Delay")
+    field(INPA, "$(RECNAME):TRIGGER_DELAY CPP")
+    field(INPB, "$(RECNAME):TrigDelay")
+    field(CALC, "(A+B*1e-9+3.3e-3)*360")
+    field(PINI, "NO")
+}
+
+record( bi, "$(RECNAME):SYNC" )
+{
+    field( DESC, "Timestamp Synchronization" )
+    field( ZNAM, "Out of Sync" )
+    field( ONAM, "Synchronized" )
+    field( VAL, "0" )
+}
+
+record(calc, "$(RECNAME):TRIGGER_CALC")
+{
+  field(DESC, "timingFifoRead event code")
+  field(CALC, "A+B")
+  field(INPA, "1000")
+  field(INPB, "$(TRIG)")
+  field(SCAN, "Passive")
+  field(PINI, "YES")
+  field(FLNK, "$(RECNAME):TRIGGER_CODE")
+}
+
+record(longin, "$(RECNAME):TRIGGER_CODE")
+{
+  field(PINI, "YES")
+  field(INP, "$(RECNAME):TRIGGER_CALC.VAL")
+}
+
+record(calc, "$(RECNAME):TRIGGER_MODE")
+{
+  field(INPA, "$(TPR):MODE CPP")
+  field(INPB, "0")
+  field(INPC, "$(TPR):CH$(TRIG)_RATEMODE CPP")
+  field(CALC, "A==0?B:C")
+}
+
+record(calc, "$(RECNAME):TRIGGER_STATE")
+{
+  field(INPA, "$(TPR):MODE CPP")
+  field(INPB, "$(TPR):CH$(TRIG)_RATEMODE CPP")
+  field(INPC, "$(TPR):CH$(TRIG)_FIXEDRATE CPP")
+  field(INPD, "$(TPR):CH$(TRIG)_ACRATE CPP")
+  field(INPE, "$(TPR):CH$(TRIG)_SEQCODE CPP")
+  field(INPF, "$(TPR):CH$(TRIG)_GROUP CPP")
+  field(INPG, "$(TPR):CH$(TRIG)_EVCODE CPP")
+  field(CALC, "A==1?((B==0?C:0)+(B==1?D:0)+(B==2?E:0)+(B==3?F:0)):G")
+}
+
+record(calc, "$(RECNAME):GEN_CALC")
+{
+  field(INPA, "$(RECNAME):TRIGGER_CODE CPP")
+  field(INPB, "$(RECNAME):TRIGGER_STATE CPP")
+  field(INPC, "$(RECNAME):TRIGGER_MODE CPP")
+  field(INPD, "$(RECNAME):GEN_CALC.LA NPP")
+  field(INPE, "$(RECNAME):GEN_CALC.LB NPP")
+  field(INPF, "$(RECNAME):GEN_CALC.LC NPP")
+  field(INPG, "$(RECNAME):GEN_CALC.VAL NPP")
+  field(CALC, "G+(A!=D?1:0)+(B!=E?1:0)+(C!=F?1:0)")
+  field(FLNK, "$(RECNAME):GEN")
+}
+
+record(longin, "$(RECNAME):GEN")
+{
+  field(PINI, "YES")
+  field(INP, "$(RECNAME):GEN_CALC.VAL")
+}

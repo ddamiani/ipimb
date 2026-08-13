@@ -133,9 +133,16 @@ long ipimbDoReadProc(struct aSubRecord *psub)
     return 0;
 }
 
+long ipimbGetFiducial(struct aSubRecord *psub)
+{
+	recGblGetTimeStamp( psub );
+	return psub->time.nsec & 0x1ffff;
+}
+
 epicsRegisterFunction(ipimbConfigInit);
 epicsRegisterFunction(ipimbConfigProc);
 epicsRegisterFunction(ipimbDoReadProc);
+epicsRegisterFunction(ipimbGetFiducial);
 
 #ifdef  __cplusplus
 }

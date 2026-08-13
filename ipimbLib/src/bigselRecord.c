@@ -1,14 +1,13 @@
 /*************************************************************************\
-* Copyright (c) 2007 UChicago Argonne LLC, as Operator of Argonne
+* Copyright (c) 2008 UChicago Argonne LLC, as Operator of Argonne
 *     National Laboratory.
 * Copyright (c) 2002 The Regents of the University of California, as
 *     Operator of Los Alamos National Laboratory.
 * EPICS BASE is distributed subject to a Software License Agreement found
 * in file LICENSE that is included with this distribution. 
 \*************************************************************************/
-/* $Id: selRecord.c,v 1.3 2007/09/27 22:42:05 ernesto Exp $ */
 
-/* selRecord.c - Record Support Routines for Select records */
+/* bigselRecord.c - Record Support Routines for Select records */
 /*
  *      Original Author: Bob Dalesio
  *      Date:            6-2-89
@@ -30,6 +29,7 @@
 #include "errMdef.h"
 #include "recSup.h"
 #include "recGbl.h"
+
 #define GEN_SIZE_OFFSET
 #include "bigselRecord.h"
 #undef  GEN_SIZE_OFFSET
@@ -38,21 +38,21 @@
 /* Create RSET - Record Support Entry Table*/
 #define report NULL
 #define initialize NULL
-static long init_record();
-static long process();
+static long init_record(struct dbCommon *, int);
+static long process(struct dbCommon *);
 #define special NULL
 #define get_value NULL
 #define cvt_dbaddr NULL
 #define get_array_info NULL
 #define put_array_info NULL
-static long get_units();
-static long get_precision();
+static long get_units(DBADDR *, char *);
+static long get_precision(const DBADDR *, long *);
 #define get_enum_str NULL
 #define get_enum_strs NULL
 #define put_enum_str NULL
-static long get_graphic_double();
-static long get_control_double();
-static long get_alarm_double();
+static long get_graphic_double(DBADDR *, struct dbr_grDouble *);
+static long get_control_double(DBADDR *, struct dbr_ctrlDouble *);
+static long get_alarm_double(DBADDR *, struct dbr_alDouble *);
 
 rset bigselRSET={
 	RSETNUMBER,
@@ -76,85 +76,84 @@ rset bigselRSET={
 };
 epicsExportAddress(rset,bigselRSET);
 
-#define	SEL_MAX	16
+#define	SEL_MAX	12
 
-static void checkAlarms();
-static void do_sel();
-static int fetch_values();
-static void monitor();
-
-/* This needed to prevent the MS optimizer from barfing */
-static double divide(double num, double den) { return num / den; }
+static void checkAlarms(bigselRecord *);
+static void do_sel(bigselRecord *);
+static int fetch_values(bigselRecord *);
+static void monitor(bigselRecord *);
 
 
-static long init_record(struct bigselRecord *psel, int pass)
+static long init_record(struct dbCommon *pcommon, int pass)
 {
+    struct bigselRecord *prec = (struct bigselRecord *)pcommon;
     struct link *plink;
     int i;
     double *pvalue;
-    double NaN = divide(0.0, 0.0);
 
-    if (pass==0) return(0);
+    if (pass==0)
+        return 0;
 
     /* get seln initial value if nvl is a constant*/
-    if (psel->nvl.type == CONSTANT ) {
-	recGblInitConstantLink(&psel->nvl,DBF_USHORT,&psel->seln);
-    }
+    recGblInitConstantLink(&prec->nvl, DBF_USHORT, &prec->seln);
 
-    plink = &psel->inpa;
-    pvalue = &psel->a;
-    for(i=0; i<SEL_MAX; i++, plink++, pvalue++) {
-	*pvalue = NaN;
-	if (plink->type==CONSTANT) {
-	    recGblInitConstantLink(plink,DBF_DOUBLE,pvalue);
-	}
+    plink = &prec->inpa;
+    pvalue = &prec->a;
+    for (i=0; i<SEL_MAX; i++, plink++, pvalue++) {
+        *pvalue = epicsNAN;
+        recGblInitConstantLink(plink, DBF_DOUBLE, pvalue);
     }
-    return(0);
+    return 0;
 }
 
-static long process(struct bigselRecord *psel)
+static long process(struct dbCommon *pcommon)
 {
-    psel->pact = TRUE;
-    if ( RTN_SUCCESS(fetch_values(psel)) ) {
-	do_sel(psel);
+    struct bigselRecord *prec = (struct bigselRecord *)pcommon;
+    prec->pact = TRUE;
+    if ( RTN_SUCCESS(fetch_values(prec)) ) {
+	do_sel(prec);
     }
 
-    recGblGetTimeStamp(psel);
+    recGblGetTimeStamp(prec);
     /* check for alarms */
-    checkAlarms(psel);
+    checkAlarms(prec);
 
 
     /* check event list */
-    monitor(psel);
+    monitor(prec);
 
     /* process the forward scan link record */
-    recGblFwdLink(psel);
+    recGblFwdLink(prec);
 
-    psel->pact=FALSE;
+    prec->pact=FALSE;
     return(0);
 }
 
 
-static long get_units(struct dbAddr *paddr, char *units)
-{
-    struct bigselRecord	*psel=(struct bigselRecord *)paddr->precord;
+#define indexof(field) bigselRecord##field
 
-    strncpy(units,psel->egu,DB_UNITS_SIZE);
+static long get_units(DBADDR *paddr, char *units)
+{
+    bigselRecord	*prec=(bigselRecord *)paddr->precord;
+
+    if(paddr->pfldDes->field_type == DBF_DOUBLE) {
+        strncpy(units,prec->egu,DB_UNITS_SIZE);
+    }
     return(0);
 }
 
-static long get_precision(struct dbAddr *paddr, long *precision)
+static long get_precision(const DBADDR *paddr, long *precision)
 {
-    struct bigselRecord	*psel=(struct bigselRecord *)paddr->precord;
+    bigselRecord	*prec=(bigselRecord *)paddr->precord;
     double *pvalue,*plvalue;
     int i;
 
-    *precision = psel->prec;
-    if(paddr->pfield==(void *)&psel->val){
+    *precision = prec->prec;
+    if(paddr->pfield==(void *)&prec->val){
         return(0);
     }
-    pvalue = &psel->a;
-    plvalue = &psel->la;
+    pvalue = &prec->a;
+    plvalue = &prec->la;
     for(i=0; i<SEL_MAX; i++, pvalue++, plvalue++) {
 	if(paddr->pfield==(void *)&pvalue
 	|| paddr->pfield==(void *)&plvalue){
@@ -166,259 +165,266 @@ static long get_precision(struct dbAddr *paddr, long *precision)
 }
 
 
-static long get_graphic_double(struct dbAddr *paddr, struct dbr_grDouble *pgd)
+static long get_graphic_double(DBADDR *paddr, struct dbr_grDouble *pgd)
 {
-    struct bigselRecord	*psel=(struct bigselRecord *)paddr->precord;
-
-    if(paddr->pfield==(void *)&psel->val
-    || paddr->pfield==(void *)&psel->hihi
-    || paddr->pfield==(void *)&psel->high
-    || paddr->pfield==(void *)&psel->low
-    || paddr->pfield==(void *)&psel->lolo){
-	pgd->upper_disp_limit = psel->hopr;
-	pgd->lower_disp_limit = psel->lopr;
-	return(0);
+    bigselRecord	*prec=(bigselRecord *)paddr->precord;
+    int index = dbGetFieldIndex(paddr);
+    
+    switch (index) {
+        case indexof(VAL):
+        case indexof(HIHI):
+        case indexof(HIGH):
+        case indexof(LOW):
+        case indexof(LOLO):
+        case indexof(LALM):
+        case indexof(ALST):
+        case indexof(MLST):
+#ifdef __GNUC__
+        case indexof(A) ... indexof(L):
+        case indexof(LA) ... indexof(LL):
+            break;
+        default:
+#else
+            break;
+        default:
+            if((index >= indexof(A) && index <= indexof(L))
+            || (index >= indexof(LA) && index <= indexof(LL)))
+                break;
+#endif
+            recGblGetGraphicDouble(paddr,pgd);
+            return(0);
     }
-
-    if(paddr->pfield>=(void *)&psel->a && paddr->pfield<=(void *)&psel->l){
-	pgd->upper_disp_limit = psel->hopr;
-	pgd->lower_disp_limit = psel->lopr;
-	return(0);
-    }
-    if(paddr->pfield>=(void *)&psel->la && paddr->pfield<=(void *)&psel->ll){
-	pgd->upper_disp_limit = psel->hopr;
-	pgd->lower_disp_limit = psel->lopr;
-	return(0);
-    }
-    recGblGetGraphicDouble(paddr,pgd);
+    pgd->upper_disp_limit = prec->hopr;
+    pgd->lower_disp_limit = prec->lopr;
     return(0);
 }
 
 static long get_control_double(struct dbAddr *paddr, struct dbr_ctrlDouble *pcd)
 {
-    struct bigselRecord	*psel=(struct bigselRecord *)paddr->precord;
-
-    if(paddr->pfield==(void *)&psel->val
-    || paddr->pfield==(void *)&psel->hihi
-    || paddr->pfield==(void *)&psel->high
-    || paddr->pfield==(void *)&psel->low
-    || paddr->pfield==(void *)&psel->lolo){
-	pcd->upper_ctrl_limit = psel->hopr;
-	pcd->lower_ctrl_limit = psel->lopr;
-	return(0);
+    bigselRecord	*prec=(bigselRecord *)paddr->precord;
+    int index = dbGetFieldIndex(paddr);
+    
+    switch (index) {
+        case indexof(VAL):
+        case indexof(HIHI):
+        case indexof(HIGH):
+        case indexof(LOW):
+        case indexof(LOLO):
+        case indexof(LALM):
+        case indexof(ALST):
+        case indexof(MLST):
+#ifdef __GNUC__
+        case indexof(A) ... indexof(L):
+        case indexof(LA) ... indexof(LL):
+            break;
+        default:
+#else
+            break;
+        default:
+            if((index >= indexof(A) && index <= indexof(L))
+            || (index >= indexof(LA) && index <= indexof(LL)))
+                break;
+#endif
+            recGblGetControlDouble(paddr,pcd);
+            return(0);
     }
-
-    if(paddr->pfield>=(void *)&psel->a && paddr->pfield<=(void *)&psel->l){
-	pcd->upper_ctrl_limit = psel->hopr;
-	pcd->lower_ctrl_limit = psel->lopr;
-	return(0);
-    }
-    if(paddr->pfield>=(void *)&psel->la && paddr->pfield<=(void *)&psel->ll){
-	pcd->upper_ctrl_limit = psel->hopr;
-	pcd->lower_ctrl_limit = psel->lopr;
-	return(0);
-    }
-    recGblGetControlDouble(paddr,pcd);
+    pcd->upper_ctrl_limit = prec->hopr;
+    pcd->lower_ctrl_limit = prec->lopr;
     return(0);
 }
 
-static long get_alarm_double(struct dbAddr *paddr, struct dbr_alDouble *pad)
+static long get_alarm_double(DBADDR *paddr, struct dbr_alDouble *pad)
 {
-    struct bigselRecord	*psel=(struct bigselRecord *)paddr->precord;
+    bigselRecord	*prec=(bigselRecord *)paddr->precord;
 
-    if(paddr->pfield==(void *)&psel->val ){
-	pad->upper_alarm_limit = psel->hihi;
-	pad->upper_warning_limit = psel->high;
-	pad->lower_warning_limit = psel->low;
-	pad->lower_alarm_limit = psel->lolo;
+    if(dbGetFieldIndex(paddr) == indexof(VAL)) {
+        pad->upper_alarm_limit = prec->hhsv ? prec->hihi : epicsNAN;
+        pad->upper_warning_limit = prec->hsv ? prec->high : epicsNAN;
+        pad->lower_warning_limit = prec->lsv ? prec->low : epicsNAN;
+        pad->lower_alarm_limit = prec->llsv ? prec->lolo : epicsNAN;
     } else recGblGetAlarmDouble(paddr,pad);
     return(0);
 }
 
-static void checkAlarms(struct bigselRecord *psel)
+static void checkAlarms(bigselRecord *prec)
 {
-    double		val;
-    double		hyst, lalm, hihi, high, low, lolo;
-    unsigned short	hhsv, llsv, hsv, lsv;
+    double val, hyst, lalm;
+    double alev;
+    epicsEnum16 asev;
 
-    if (psel->udf){
-	recGblSetSevr(psel,UDF_ALARM,INVALID_ALARM);
-	return;
+    if (prec->udf) {
+        recGblSetSevr(prec, UDF_ALARM, prec->udfs);
+        return;
     }
-    hihi = psel->hihi; lolo = psel->lolo; high = psel->high; low = psel->low;
-    hhsv = psel->hhsv; llsv = psel->llsv; hsv = psel->hsv; lsv = psel->lsv;
-    val = psel->val; hyst = psel->hyst; lalm = psel->lalm;
+
+    val = prec->val;
+    hyst = prec->hyst;
+    lalm = prec->lalm;
 
     /* alarm condition hihi */
-    if (hhsv && (val >= hihi || ((lalm==hihi) && (val >= hihi-hyst)))){
-	if (recGblSetSevr(psel,HIHI_ALARM,psel->hhsv)) psel->lalm = hihi;
-	return;
+    asev = prec->hhsv;
+    alev = prec->hihi;
+    if (asev && (val >= alev || ((lalm == alev) && (val >= alev - hyst)))) {
+        if (recGblSetSevr(prec, HIHI_ALARM, asev))
+            prec->lalm = alev;
+        return;
     }
 
     /* alarm condition lolo */
-    if (llsv && (val <= lolo || ((lalm==lolo) && (val <= lolo+hyst)))){
-	if (recGblSetSevr(psel,LOLO_ALARM,psel->llsv)) psel->lalm = lolo;
-	return;
+    asev = prec->llsv;
+    alev = prec->lolo;
+    if (asev && (val <= alev || ((lalm == alev) && (val <= alev + hyst)))) {
+        if (recGblSetSevr(prec, LOLO_ALARM, asev))
+            prec->lalm = alev;
+        return;
     }
 
     /* alarm condition high */
-    if (hsv && (val >= high || ((lalm==high) && (val >= high-hyst)))){
-	if (recGblSetSevr(psel,HIGH_ALARM,psel->hsv)) psel->lalm = high;
-	return;
+    asev = prec->hsv;
+    alev = prec->high;
+    if (asev && (val >= alev || ((lalm == alev) && (val >= alev - hyst)))) {
+        if (recGblSetSevr(prec, HIGH_ALARM, asev))
+            prec->lalm = alev;
+        return;
     }
 
     /* alarm condition low */
-    if (lsv && (val <= low || ((lalm==low) && (val <= low+hyst)))){
-	if (recGblSetSevr(psel,LOW_ALARM,psel->lsv)) psel->lalm = low;
-	return;
+    asev = prec->lsv;
+    alev = prec->low;
+    if (asev && (val <= alev || ((lalm == alev) && (val <= alev + hyst)))) {
+        if (recGblSetSevr(prec, LOW_ALARM, asev))
+            prec->lalm = alev;
+        return;
     }
 
     /* we get here only if val is out of alarm by at least hyst */
-    psel->lalm = val;
+    prec->lalm = val;
     return;
 }
 
-static void monitor(struct bigselRecord *psel)
+static void monitor(bigselRecord *prec)
 {
-    unsigned short	monitor_mask;
-    double		delta;
+    unsigned    monitor_mask;
     double		*pnew;
     double		*pprev;
     int			i;
 
-    monitor_mask = recGblResetAlarms(psel);
+    monitor_mask = recGblResetAlarms(prec);
+
     /* check for value change */
-    delta = psel->mlst - psel->val;
-    if(delta<0.0) delta = -delta;
-    if (delta > psel->mdel) {
-        /* post events for value change */
-        monitor_mask |= DBE_VALUE;
-        /* update last value monitored */
-        psel->mlst = psel->val;
-    }
+    recGblCheckDeadband(&prec->mlst, prec->val, prec->mdel, &monitor_mask, DBE_VALUE);
+
     /* check for archive change */
-    delta = psel->alst - psel->val;
-    if(delta<0.0) delta = -delta;
-    if (delta > psel->adel) {
-        /* post events on value field for archive change */
-        monitor_mask |= DBE_LOG;
-        /* update last archive value monitored */
-        psel->alst = psel->val;
-    }
+    recGblCheckDeadband(&prec->alst, prec->val, prec->adel, &monitor_mask, DBE_ARCHIVE);
 
     /* send out monitors connected to the value field */
     if (monitor_mask)
-        db_post_events(psel, &psel->val, monitor_mask);
+        db_post_events(prec, &prec->val, monitor_mask);
 
     monitor_mask |= DBE_VALUE|DBE_LOG;
 
     /* trigger monitors of the SELN field */
-    if (psel->nlst != psel->seln) {
-	psel->nlst = psel->seln;
-	db_post_events(psel, &psel->seln, monitor_mask);
+    if (prec->nlst != prec->seln) {
+	prec->nlst = prec->seln;
+	db_post_events(prec, &prec->seln, monitor_mask);
     }
 
     /* check all input fields for changes, even if VAL hasn't changed */
-    for(i=0, pnew=&psel->a, pprev=&psel->la; i<SEL_MAX; i++, pnew++, pprev++) {
+    for(i=0, pnew=&prec->a, pprev=&prec->la; i<SEL_MAX; i++, pnew++, pprev++) {
 	if(*pnew != *pprev) {
-	    db_post_events(psel, pnew, monitor_mask);
+	    db_post_events(prec, pnew, monitor_mask);
 	    *pprev = *pnew;
 	}
     }
     return;
 }
 
-static void do_sel(struct bigselRecord *psel)
+static void do_sel(bigselRecord *prec)
 {
     double		*pvalue;
-    struct link		*plink;
     double		order[SEL_MAX];
-    unsigned short	order_inx;
+    unsigned short	count;
     unsigned short	i,j;
     double		val;
 
     /* selection mechanism */
-    pvalue = &psel->a;
-    switch (psel->selm){
+    pvalue = &prec->a;
+    switch (prec->selm){
     case (selSELM_Specified):
-	if (psel->seln >= SEL_MAX) {
-	    recGblSetSevr(psel,SOFT_ALARM,INVALID_ALARM);
-	    return;
-	}
-	val = *(pvalue+psel->seln);
-	break;
+        if (prec->seln >= SEL_MAX) {
+            recGblSetSevr(prec,SOFT_ALARM,INVALID_ALARM);
+            return;
+        }
+        val = *(pvalue+prec->seln);
+        break;
     case (selSELM_High_Signal):
-	val = divide(-1.0, 0.0); /* Start at -Inf */
-	for (i = 0; i < SEL_MAX; i++,pvalue++){
-	    if (!isnan(*pvalue) && val < *pvalue) {
-		val = *pvalue;
-		psel->seln = i;
-	    }
-	}
-	break;
+        val = -epicsINF;
+        for (i = 0; i < SEL_MAX; i++,pvalue++){
+            if (!isnan(*pvalue) && val < *pvalue) {
+                val = *pvalue;
+                prec->seln = i;
+            }
+        }
+        break;
     case (selSELM_Low_Signal):
-	val = divide(1.0, 0.0); /* Start at +Inf */
-	for (i = 0; i < SEL_MAX; i++,pvalue++){
-	    if (!isnan(*pvalue) && val > *pvalue) {
-		val = *pvalue;
-		psel->seln = i;
-	    }
-	}
-	break;
+        val = epicsINF;
+        for (i = 0; i < SEL_MAX; i++,pvalue++){
+            if (!isnan(*pvalue) && val > *pvalue) {
+                val = *pvalue;
+                prec->seln = i;
+            }
+        }
+        break;
     case (selSELM_Median_Signal):
-	plink = &psel->inpa;
-	order_inx = 0;
-	for (i = 0; i < SEL_MAX; i++,pvalue++,plink++){
-	    if (!isnan(*pvalue)){
-		j = order_inx;
-		while ((order[j-1] > *pvalue) && (j > 0)){
-		    order[j] = order[j-1];
-		    j--;
-		}
-		order[j] = *pvalue;
-		order_inx++;
-	    }
-	}
-	psel->seln = order_inx/2;
-	val = order[psel->seln];
-	break;
+        count = 0;
+        order[0] = epicsNAN;
+        for (i = 0; i < SEL_MAX; i++,pvalue++){
+            if (!isnan(*pvalue)){
+                /* Insertion sort */
+                j = count;
+                while ((j > 0) && (order[j-1] > *pvalue)){
+                    order[j] = order[j-1];
+                    j--;
+                }
+                order[j] = *pvalue;
+                count++;
+            }
+        }
+        prec->seln = count;
+        val = order[count / 2];
+        break;
     default:
-	recGblSetSevr(psel,CALC_ALARM,INVALID_ALARM);
-	return;
+        recGblSetSevr(prec,CALC_ALARM,INVALID_ALARM);
+        return;
     }
-    if (!isinf(val)){
-	psel->val=val;
-	psel->udf=isnan(psel->val);
-    }  else {
-	recGblSetSevr(psel,UDF_ALARM,MAJOR_ALARM);
-	/* If UDF is TRUE this alarm will be overwritten by checkAlarms*/
-    }
+    prec->val = val;
+    prec->udf = isnan(prec->val);
     return;
 }
-
+
 /*
  * FETCH_VALUES
  *
  * fetch the values for the variables from which to select
  */
-static int fetch_values(struct bigselRecord *psel)
+static int fetch_values(bigselRecord *prec)
 {
     struct link	*plink;
     double	*pvalue;
     int		i;
     long	status;
 
-    plink = &psel->inpa;
-    pvalue = &psel->a;
+    plink = &prec->inpa;
+    pvalue = &prec->a;
     /* If mechanism is selSELM_Specified, only get the selected input*/
-    if(psel->selm == selSELM_Specified) {
+    if(prec->selm == selSELM_Specified) {
 	/* fetch the select index */
-	status=dbGetLink(&(psel->nvl),DBR_USHORT,&(psel->seln),0,0);
-	if (!RTN_SUCCESS(status) || (psel->seln >= SEL_MAX))
+	status=dbGetLink(&(prec->nvl),DBR_USHORT,&(prec->seln),0,0);
+	if (!RTN_SUCCESS(status) || (prec->seln >= SEL_MAX))
 	    return(status);
 
-	plink += psel->seln;
-	pvalue += psel->seln;
+	plink += prec->seln;
+	pvalue += prec->seln;
 
 	status=dbGetLink(plink,DBR_DOUBLE, pvalue,0,0);
 	return(status);

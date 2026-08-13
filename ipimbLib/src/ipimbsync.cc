@@ -2,6 +2,8 @@
 
 #include "timingFifoApi.h"
 
+#include <inttypes.h>
+
 using namespace std;
 using namespace Pds;
 
@@ -60,7 +62,7 @@ DataObject *ipimbSyncObject::Acquire(void)
         }
         did_skip = 0;
         if (DBG_ENABLED(DEBUG_TC_V) && !COMMAND(rdbuf[0])) {
-            printf("IPIMB %s data read @ fid 0x%x\n", ipimb->_name, timingGetLastFiducial());
+            printf("IPIMB %s data read @ fid 0x%" PRIx64 "\n", ipimb->_name, timingGetLastFiducial());
             fflush(stdout);
         }
 
